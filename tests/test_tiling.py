@@ -3,11 +3,14 @@ import unittest
 import numpy as np
 
 from webapp.tiling import (
+    EdgeFragment,
     GrainDetection,
+    build_seam_recaptures,
     filter_image_border_detections,
     filter_tile_detections,
     generate_tiles,
     merge_duplicate_detections,
+    select_seam_recoveries,
 )
 
 
@@ -118,6 +121,39 @@ class DuplicateMergingTests(unittest.TestCase):
         merged = merge_duplicate_detections([first, second])
         self.assertEqual(len(merged), 2)
 
+
+class SeamRecoveryTests(unittest.TestCase):
+    def test_recapture_crop_is_centered_across_the_cut_seam(self):
+        fragment = EdgeFragment(
+            detection=detection((85, 90, 100, 115), source_tile=1),
+            seam_x=100,
+        )
+
+        recaptures = build_seam_recaptures(
+            [fragment], image_width=200, image_height=200, crop_size=100
+        )
+
+        self.assertEqual(len(recaptures), 1)
+        tile = recaptures[0].tile
+        self.assertLess(tile.x1, 100)
+        self.assertGreater(tile.x2, 100)
+        self.assertIs(recaptures[0].fragments[0], fragment)
+
+    def test_complete_second_pass_mask_replaces_partial_fragment(self):
+        fragment = EdgeFragment(
+            detection=detection((85, 90, 100, 115), source_tile=1),
+            seam_x=100,
+        )
+        recapture = build_seam_recaptures(
+            [fragment], image_width=200, image_height=200, crop_size=100
+        )[0]
+        complete = detection((85, 90, 115, 115), confidence=0.95, source_tile=2)
+        unrelated = detection((130, 130, 150, 150), source_tile=2)
+
+        recovered = select_seam_recoveries([complete, unrelated], recapture)
+
+        self.assertEqual(len(recovered), 1)
+        self.assertIs(recovered[0], complete)
 
 if __name__ == "__main__":
     unittest.main()
