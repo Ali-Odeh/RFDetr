@@ -5,7 +5,9 @@ import numpy as np
 from webapp.evaluation import evaluate_instance_segmentation
 from webapp.tiling import (
     AnalysisResult,
+    CLASS_COLORS_BGR,
     GrainDetection,
+    annotate_image,
     get_approach_one_evaluation_class,
     summarize_result,
 )
@@ -30,7 +32,7 @@ class ApproachOneMappingTests(unittest.TestCase):
         self.assertEqual(get_approach_one_evaluation_class("healthy seed"), "bad seed")
         self.assertEqual(get_approach_one_evaluation_class("impurity"), "impurity")
 
-    def test_aggregate_counts_are_mapped_but_raw_detection_is_unchanged(self) -> None:
+    def test_all_user_facing_classes_are_mapped_and_raw_fields_are_preserved(self) -> None:
         detections = [detection(0, 0), detection(0, 1), detection(1, 2), detection(2, 3)]
         result = AnalysisResult(
             detections=detections,
@@ -45,7 +47,17 @@ class ApproachOneMappingTests(unittest.TestCase):
         summary = summarize_result(result)
 
         self.assertEqual(summary["counts"], {"bad seed": 1, "healthy seed": 2, "impurity": 1})
-        self.assertEqual(detections[0].as_dict(1)["class_name"], "bad seed")
+        serialized = detections[0].as_dict(1)
+        self.assertEqual(serialized["class_id"], 1)
+        self.assertEqual(serialized["class_name"], "healthy seed")
+        self.assertEqual(serialized["raw_class_id"], 0)
+        self.assertEqual(serialized["raw_class_name"], "bad seed")
+
+    def test_visualization_uses_mapped_color(self) -> None:
+        raw_bad = detection(0, 0)
+        annotated = annotate_image(np.zeros((12, 12, 3), dtype=np.uint8), [raw_bad])
+
+        self.assertTrue(np.array_equal(annotated[0, 0], CLASS_COLORS_BGR[1]))
 
     def test_accuracy_uses_mapped_predictions_and_original_ground_truth(self) -> None:
         raw_predictions = [detection(0, 0), detection(1, 1), detection(2, 2)]

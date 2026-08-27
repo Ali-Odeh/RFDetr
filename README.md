@@ -43,7 +43,7 @@ The web interface loads the best Dataset V2 Large checkpoint. It converts OpenCV
 
 Ground Truth evaluation is optional. Upload the image's matching YOLO Segmentation `.txt` label (`class_id x1 y1 x2 y2 ...`, normalized coordinates) to calculate class-aware mask metrics at the selected IoU threshold: TP/FP/FN, precision, recall, F1, mean mask IoU, accuracy among spatial matches, per-class metrics, and a confusion matrix. Ground Truth is used for metrics and count tables only; the page does not generate a combined prediction/GT image. Without a label, the page remains inference-only and does not claim an accuracy value.
 
-The deployed checkpoint is Approach 1, whose bad/healthy output semantics are reversed. Aggregate counts and Ground Truth evaluation therefore apply the fixed mapping `model bad -> evaluation healthy`, `model healthy -> evaluation bad`, and `impurity -> impurity`. Global `CLASS_NAMES`, Ground Truth IDs, raw per-instance detections, CSV/JSON detection classes, and the raw visualization remain unchanged.
+The deployed checkpoint is Approach 1, whose bad/healthy output semantics are reversed. All user-facing outputs therefore apply the fixed mapping `model bad -> displayed healthy`, `model healthy -> displayed bad`, and `impurity -> impurity`. This includes visualization colors and labels, aggregate counts, detection tables, CSV/JSON display classes, and Ground Truth evaluation. Ground Truth IDs and the global class order remain unchanged. Each exported detection also includes `raw_class_id` and `raw_class_name` for auditability.
 
 
 For local use, place the trained Large V2 checkpoint at:

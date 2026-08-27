@@ -14,9 +14,9 @@ import numpy as np
 
 
 CLASS_NAMES = ("bad seed", "healthy seed", "impurity")
-# Approach 1 checkpoint semantics are reversed for bad/healthy. Keep the raw
-# model class order and visualization unchanged; use this mapping only for
-# displayed aggregate counts and Ground Truth evaluation.
+# Approach 1 checkpoint semantics are reversed for bad/healthy. The raw model
+# class ID is preserved on every GrainDetection for auditability, while all
+# user-facing labels, colors, counts, exports, and evaluation use this mapping.
 APPROACH_ONE_EVALUATION_CLASS_MAP = {
     "bad seed": "healthy seed",
     "healthy seed": "bad seed",
@@ -75,12 +75,23 @@ class GrainDetection:
     def mask_area(self) -> int:
         return self._mask_area
 
+    @property
+    def display_class_id(self) -> int:
+        """Return the corrected semantic class exposed to users."""
+        return get_approach_one_evaluation_class_id(self.class_id)
+
+    @property
+    def display_class_name(self) -> str:
+        return CLASS_NAMES[self.display_class_id]
+
     def as_dict(self, detection_id: int) -> dict[str, Any]:
         x1, y1, x2, y2 = (float(value) for value in self.bbox)
         return {
             "id": detection_id,
-            "class_id": self.class_id,
-            "class_name": CLASS_NAMES[self.class_id],
+            "class_id": self.display_class_id,
+            "class_name": self.display_class_name,
+            "raw_class_id": self.class_id,
+            "raw_class_name": CLASS_NAMES[self.class_id],
             "confidence": round(self.confidence, 4),
             "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
             "center": [round((x1 + x2) / 2, 1), round((y1 + y2) / 2, 1)],
@@ -309,7 +320,8 @@ def annotate_image(image_bgr: np.ndarray, detections: list[GrainDetection]) -> n
     draw_labels = len(detections) <= 200
 
     for detection in detections:
-        color = CLASS_COLORS_BGR.get(detection.class_id, (255, 255, 255))
+        display_class_id = detection.display_class_id
+        color = CLASS_COLORS_BGR.get(display_class_id, (255, 255, 255))
         if detection.mask_crop is not None and detection.mask_crop.any():
             x, y = detection.mask_origin
             mask_h, mask_w = detection.mask_crop.shape
@@ -323,7 +335,7 @@ def annotate_image(image_bgr: np.ndarray, detections: list[GrainDetection]) -> n
         x1, y1, x2, y2 = (int(round(value)) for value in detection.bbox)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 1)
         if draw_labels:
-            label = f"{CLASS_NAMES[detection.class_id]} {detection.confidence:.2f}"
+            label = f"{detection.display_class_name} {detection.confidence:.2f}"
             cv2.putText(
                 annotated,
                 label,
@@ -473,8 +485,9 @@ def summarize_result(result: AnalysisResult) -> dict[str, Any]:
         },
         "evaluation_class_mapping": {
             "name": "Approach 1",
-            "applied_to": "aggregate counts and Ground Truth evaluation only",
+            "applied_to": "all user-facing outputs and Ground Truth evaluation",
             "raw_to_evaluation": dict(APPROACH_ONE_EVALUATION_CLASS_MAP),
-            "raw_visualization_unchanged": True,
+            "raw_fields_preserved_in_exports": True,
+            "visualization_uses_corrected_classes": True,
         },
     }

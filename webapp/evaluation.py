@@ -224,7 +224,7 @@ def evaluate_instance_segmentation(
             "name": "Approach 1",
             "raw_prediction_id_to_evaluation_id": {"0": 1, "1": 0, "2": 2},
             "ground_truth_order_unchanged": True,
-            "raw_visualization_unchanged": True,
+            "visualization_uses_corrected_classes": True,
         },
         "confusion_matrix": {
             "labels": list(CLASS_NAMES),

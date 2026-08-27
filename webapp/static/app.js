@@ -166,9 +166,10 @@ function setClassMetric(prefix, data, className) {
 
 document.querySelector("#downloadCsv").addEventListener("click", () => {
     if (!latestResult) return;
-    const rows = [["id", "class", "confidence", "x1", "y1", "x2", "y2", "center_x", "center_y"]];
+    const rows = [["id", "class_id", "class", "raw_class_id", "raw_class", "confidence", "x1", "y1", "x2", "y2", "center_x", "center_y"]];
     latestResult.detections.forEach(item => rows.push([
-        item.id, item.class_name, item.confidence, ...item.bbox, ...item.center
+        item.id, item.class_id, item.class_name, item.raw_class_id, item.raw_class_name,
+        item.confidence, ...item.bbox, ...item.center
     ]));
     const csv = rows.map(row => row.map(csvValue).join(",")).join("\n");
     downloadBlob(csv, "multispector-detections.csv", "text/csv;charset=utf-8");
