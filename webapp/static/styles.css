@@ -50,11 +50,14 @@ body {
 .selected-label { margin: 8px 2px 0; font-size: .82rem; direction: ltr; text-align: left; }
 .drop-zone span, .selected-file, .muted { color: var(--muted); }
 .upload-icon { color: #7a8781; font-size: 3rem; line-height: 1; transform: rotate(25deg); }
-.controls { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto; gap: 14px; margin-top: 18px; align-items: end; }
+.controls { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr auto; gap: 14px; margin-top: 18px; align-items: end; }
 .controls label { display: flex; flex-direction: column; gap: 9px; color: var(--muted); font-size: .86rem; }
-select, input[type="range"] { width: 100%; }
-select { appearance: none; border: 1px solid var(--border); border-radius: 11px; color: var(--text); background: var(--panel-strong); padding: 12px 13px; }
+select, input[type="range"], input[type="number"] { width: 100%; }
+select, input[type="number"] { appearance: none; border: 1px solid var(--border); border-radius: 11px; color: var(--text); background: var(--panel-strong); padding: 12px 13px; }
 input[type="range"] { accent-color: #7d8984; }
+.number-control { position: relative; }
+.number-control input { padding-right: 38px; }
+.number-control span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 button, .secondary-button { border: 0; font: inherit; cursor: pointer; }
 .primary-button { border: 1px solid rgba(35,47,43,.18); border-radius: 12px; padding: 13px 24px; color: var(--text); background: var(--accent); font-weight: 800; min-width: 160px; box-shadow: 0 7px 18px rgba(30,40,36,.08); }
 .primary-button:hover { background: #dce1de; }

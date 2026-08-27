@@ -51,6 +51,7 @@ form.addEventListener("submit", async event => {
     data.append("tile_size", document.querySelector("#tileSize").value);
     data.append("overlap", document.querySelector("#overlap").value);
     data.append("evaluation_iou", document.querySelector("#evaluationIou").value);
+    data.append("border_margin", document.querySelector("#borderMargin").value);
 
     try {
         const response = await fetch("/api/analyze", { method: "POST", body: data });
@@ -86,12 +87,16 @@ function renderResult(data) {
         "Adaptive splits": p.saturated_tiles,
         "Raw predictions": p.raw_predictions,
         "Discarded parent predictions": p.adaptive_parent_predictions_discarded,
+        "Internal tile-edge fragments": p.tile_edge_filtered,
+        "Non-owner overlap predictions": p.ownership_filtered,
         "Duplicates removed": p.duplicates_removed,
+        "Image-border grains ignored": p.border_ignored,
         "Device": p.device.toUpperCase(),
         "Model": p.model_variant,
         "FP16 optimized": p.fp16_optimized ? "Yes" : "No",
         "Tile size": `${p.tile_size}px`,
         "Overlap": `${Math.round(p.overlap * 100)}%`,
+        "Image border ignore": `${p.border_margin}px`,
     };
     document.querySelector("#processingDetails").innerHTML = Object.entries(details)
         .map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join("");
@@ -126,7 +131,8 @@ function renderEvaluation(evaluation) {
     document.querySelector("#classAccuracy").textContent = percent(evaluation.accuracy ?? evaluation.matched_class_accuracy);
     document.querySelector("#evaluationCounts").innerHTML = [
         ["TP", evaluation.true_positive], ["FP", evaluation.false_positive],
-        ["FN", evaluation.false_negative], ["Spatial matches", evaluation.spatial_matches]
+        ["FN", evaluation.false_negative], ["Spatial matches", evaluation.spatial_matches],
+        ["GT border ignored", evaluation.ground_truth_border_ignored || 0]
     ].map(([name, value]) => `<span><b>${name}</b> ${Number(value).toLocaleString()}</span>`).join("");
 
     const comparisonRows = evaluation.per_class.map(item => ({

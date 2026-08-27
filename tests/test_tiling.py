@@ -2,7 +2,13 @@ import unittest
 
 import numpy as np
 
-from webapp.tiling import GrainDetection, generate_tiles, merge_duplicate_detections
+from webapp.tiling import (
+    GrainDetection,
+    filter_image_border_detections,
+    filter_tile_detections,
+    generate_tiles,
+    merge_duplicate_detections,
+)
 
 
 def detection(box, confidence=0.9, class_id=0, mask=None, source_tile=0):
@@ -32,6 +38,57 @@ class TileGenerationTests(unittest.TestCase):
         tiles = generate_tiles(320, 240, 640, 0.20)
         self.assertEqual(len(tiles), 1)
         self.assertEqual((tiles[0].x2, tiles[0].y2), (320, 240))
+
+    def test_ownership_regions_cover_each_pixel_exactly_once(self):
+        width, height = 192, 108
+        tiles = generate_tiles(width, height, 64, 0.20)
+        for y in range(height):
+            for x in range(width):
+                owners = sum(tile.owns(x + 0.5, y + 0.5) for tile in tiles)
+                self.assertEqual(owners, 1)
+
+    def test_overlap_prediction_is_kept_by_one_owner_tile(self):
+        tiles = generate_tiles(1152, 640, 640, 0.20)
+        first_view = detection((580, 100, 620, 140), source_tile=1)
+        second_view = detection((580, 100, 620, 140), source_tile=2)
+
+        first_kept, first_edge, first_non_owner = filter_tile_detections(
+            [first_view], tiles[0], image_width=1152, image_height=640
+        )
+        second_kept, second_edge, second_non_owner = filter_tile_detections(
+            [second_view], tiles[1], image_width=1152, image_height=640
+        )
+
+        self.assertEqual(len(first_kept) + len(second_kept), 1)
+        self.assertEqual(first_edge + second_edge, 0)
+        self.assertEqual(first_non_owner + second_non_owner, 1)
+
+    def test_internal_tile_edge_fragment_is_rejected(self):
+        first_tile = generate_tiles(1152, 640, 640, 0.20)[0]
+        fragment = detection((630, 100, 640, 140), source_tile=1)
+
+        kept, edge_filtered, ownership_filtered = filter_tile_detections(
+            [fragment], first_tile, image_width=1152, image_height=640
+        )
+
+        self.assertEqual(kept, [])
+        self.assertEqual(edge_filtered, 1)
+        self.assertEqual(ownership_filtered, 0)
+
+    def test_image_border_margin_ignores_partial_grains(self):
+        border_grain = detection((5, 100, 30, 130), source_tile=1)
+        inner_grain = detection((20, 100, 45, 130), source_tile=1)
+
+        kept, ignored = filter_image_border_detections(
+            [border_grain, inner_grain],
+            image_width=200,
+            image_height=200,
+            margin=10,
+        )
+
+        self.assertEqual(len(kept), 1)
+        self.assertIs(kept[0], inner_grain)
+        self.assertEqual(ignored, 1)
 
 
 class DuplicateMergingTests(unittest.TestCase):

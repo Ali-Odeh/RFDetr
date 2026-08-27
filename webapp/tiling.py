@@ -48,6 +48,10 @@ class Tile:
     x2: int
     y2: int
     depth: int = 0
+    owner_x1: float | None = None
+    owner_y1: float | None = None
+    owner_x2: float | None = None
+    owner_y2: float | None = None
 
     @property
     def width(self) -> int:
@@ -56,6 +60,14 @@ class Tile:
     @property
     def height(self) -> int:
         return self.y2 - self.y1
+
+    def owns(self, x: float, y: float) -> bool:
+        """Return whether a global point belongs to this tile's unique core."""
+        owner_x1 = float(self.x1) if self.owner_x1 is None else self.owner_x1
+        owner_y1 = float(self.y1) if self.owner_y1 is None else self.owner_y1
+        owner_x2 = float(self.x2) if self.owner_x2 is None else self.owner_x2
+        owner_y2 = float(self.y2) if self.owner_y2 is None else self.owner_y2
+        return owner_x1 <= x < owner_x2 and owner_y1 <= y < owner_y2
 
 
 @dataclass(slots=True)
@@ -107,6 +119,10 @@ class AnalysisResult:
     raw_predictions: int
     candidate_predictions: int
     elapsed_ms: float
+    tile_edge_filtered: int = 0
+    ownership_filtered: int = 0
+    duplicates_removed: int = 0
+    border_ignored: int = 0
 
 
 def _axis_starts(length: int, tile_size: int, overlap_ratio: float) -> list[int]:
@@ -118,6 +134,23 @@ def _axis_starts(length: int, tile_size: int, overlap_ratio: float) -> list[int]
     if starts[-1] != final_start:
         starts.append(final_start)
     return starts
+
+
+def _ownership_intervals(
+    starts: list[int],
+    tile_extent: int,
+    axis_length: int,
+) -> list[tuple[float, float]]:
+    """Split every overlap at its midpoint so each point has one owner tile."""
+    if len(starts) == 1:
+        return [(0.0, float(axis_length))]
+    boundaries = [
+        (starts[index] + tile_extent + starts[index + 1]) / 2.0
+        for index in range(len(starts) - 1)
+    ]
+    lower = [0.0, *boundaries]
+    upper = [*boundaries, float(axis_length)]
+    return list(zip(lower, upper))
 
 
 def generate_tiles(
@@ -134,6 +167,8 @@ def generate_tiles(
     tile_height = min(tile_size, image_height)
     x_starts = _axis_starts(image_width, tile_width, overlap_ratio)
     y_starts = _axis_starts(image_height, tile_height, overlap_ratio)
+    x_owners = _ownership_intervals(x_starts, tile_width, image_width)
+    y_owners = _ownership_intervals(y_starts, tile_height, image_height)
     return [
         Tile(
             x1=offset_x + x,
@@ -141,9 +176,13 @@ def generate_tiles(
             x2=offset_x + min(x + tile_width, image_width),
             y2=offset_y + min(y + tile_height, image_height),
             depth=depth,
+            owner_x1=offset_x + x_owners[x_index][0],
+            owner_y1=offset_y + y_owners[y_index][0],
+            owner_x2=offset_x + x_owners[x_index][1],
+            owner_y2=offset_y + y_owners[y_index][1],
         )
-        for y in y_starts
-        for x in x_starts
+        for y_index, y in enumerate(y_starts)
+        for x_index, x in enumerate(x_starts)
     ]
 
 
@@ -211,6 +250,96 @@ def _extract_detections(
             )
         )
     return extracted
+
+
+def _detection_extent(item: GrainDetection) -> tuple[float, float, float, float]:
+    """Return tight global mask bounds, falling back to the prediction box."""
+    if item.mask_crop is not None and item.mask_crop.any():
+        rows, columns = np.nonzero(item.mask_crop)
+        origin_x, origin_y = item.mask_origin
+        return (
+            float(origin_x + columns.min()),
+            float(origin_y + rows.min()),
+            float(origin_x + columns.max() + 1),
+            float(origin_y + rows.max() + 1),
+        )
+    return tuple(float(value) for value in item.bbox)
+
+
+def _detection_representative_point(item: GrainDetection) -> tuple[float, float]:
+    """Use mask centroid (or box center) as the stable tile ownership point."""
+    if item.mask_crop is not None and item.mask_crop.any():
+        rows, columns = np.nonzero(item.mask_crop)
+        origin_x, origin_y = item.mask_origin
+        return float(origin_x + columns.mean()), float(origin_y + rows.mean())
+    x1, y1, x2, y2 = (float(value) for value in item.bbox)
+    return (x1 + x2) / 2.0, (y1 + y2) / 2.0
+
+
+def filter_tile_detections(
+    detections: Iterable[GrainDetection],
+    tile: Tile,
+    *,
+    image_width: int,
+    image_height: int,
+    internal_edge_tolerance: int = 2,
+) -> tuple[list[GrainDetection], int, int]:
+    """Keep one tile owner and reject objects clipped by internal tile edges."""
+    kept: list[GrainDetection] = []
+    edge_filtered = 0
+    ownership_filtered = 0
+    tolerance = max(0, internal_edge_tolerance)
+
+    for detection in detections:
+        left, top, right, bottom = _detection_extent(detection)
+        touches_internal_edge = (
+            (tile.x1 > 0 and left <= tile.x1 + tolerance)
+            or (tile.y1 > 0 and top <= tile.y1 + tolerance)
+            or (tile.x2 < image_width and right >= tile.x2 - tolerance)
+            or (tile.y2 < image_height and bottom >= tile.y2 - tolerance)
+        )
+        if touches_internal_edge:
+            edge_filtered += 1
+            continue
+
+        center_x, center_y = _detection_representative_point(detection)
+        if not tile.owns(center_x, center_y):
+            ownership_filtered += 1
+            continue
+        kept.append(detection)
+
+    return kept, edge_filtered, ownership_filtered
+
+
+def filter_image_border_detections(
+    detections: Iterable[GrainDetection],
+    *,
+    image_width: int,
+    image_height: int,
+    margin: int = 10,
+) -> tuple[list[GrainDetection], int]:
+    """Ignore partial grains crossing the inner image-border safety line."""
+    safe_margin = max(0, min(int(margin), min(image_width, image_height) // 4))
+    if safe_margin == 0:
+        items = list(detections)
+        return items, 0
+
+    kept: list[GrainDetection] = []
+    ignored = 0
+    right_limit = image_width - safe_margin
+    bottom_limit = image_height - safe_margin
+    for detection in detections:
+        left, top, right, bottom = _detection_extent(detection)
+        if (
+            left <= safe_margin
+            or top <= safe_margin
+            or right >= right_limit
+            or bottom >= bottom_limit
+        ):
+            ignored += 1
+        else:
+            kept.append(detection)
+    return kept, ignored
 
 
 def _bbox_intersection(first: GrainDetection, second: GrainDetection) -> float:
@@ -398,6 +527,7 @@ class TiledGrainAnalyzer:
         saturation_threshold: int = DEFAULT_SATURATION_THRESHOLD,
         max_depth: int = 2,
         min_tile_size: int = 256,
+        image_border_margin: int = 10,
     ) -> AnalysisResult:
         if image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
             raise ValueError("Expected a BGR color image.")
@@ -411,6 +541,9 @@ class TiledGrainAnalyzer:
         tiles_processed = 0
         saturated_tiles = 0
         raw_predictions = 0
+        candidate_predictions = 0
+        tile_edge_filtered = 0
+        ownership_filtered = 0
 
         with self._lock:
             while queue:
@@ -434,17 +567,38 @@ class TiledGrainAnalyzer:
                         queue[0:0] = children
                         continue
 
-                collected.extend(_extract_detections(raw, tile, tiles_processed))
+                extracted = _extract_detections(raw, tile, tiles_processed)
+                candidate_predictions += len(extracted)
+                owned, edge_count, ownership_count = filter_tile_detections(
+                    extracted,
+                    tile,
+                    image_width=width,
+                    image_height=height,
+                )
+                tile_edge_filtered += edge_count
+                ownership_filtered += ownership_count
+                collected.extend(owned)
 
         merged = merge_duplicate_detections(collected)
-        annotated = annotate_image(image_bgr, merged)
+        duplicates_removed = len(collected) - len(merged)
+        final_detections, border_ignored = filter_image_border_detections(
+            merged,
+            image_width=width,
+            image_height=height,
+            margin=image_border_margin,
+        )
+        annotated = annotate_image(image_bgr, final_detections)
         return AnalysisResult(
-            detections=merged,
+            detections=final_detections,
             annotated_image=annotated,
             tiles_processed=tiles_processed,
             saturated_tiles=saturated_tiles,
             raw_predictions=raw_predictions,
-            candidate_predictions=len(collected),
+            candidate_predictions=candidate_predictions,
+            tile_edge_filtered=tile_edge_filtered,
+            ownership_filtered=ownership_filtered,
+            duplicates_removed=duplicates_removed,
+            border_ignored=border_ignored,
             elapsed_ms=(time.perf_counter() - started) * 1000,
         )
 

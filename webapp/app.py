@@ -20,6 +20,7 @@ from webapp.evaluation import (
 from webapp.tiling import (
     TiledGrainAnalyzer,
     encode_jpeg_data_url,
+    filter_image_border_detections,
     summarize_result,
 )
 
@@ -157,8 +158,10 @@ async def analyze(request: web.Request) -> web.Response:
     tile_size = min(max(_int_field(fields, "tile_size", 640), 320), 1280)
     overlap = min(max(_float_field(fields, "overlap", 0.20), 0.10), 0.40)
     evaluation_iou = min(max(_float_field(fields, "evaluation_iou", 0.50), 0.10), 0.95)
+    border_margin = min(max(_int_field(fields, "border_margin", 10), 0), 100)
 
     ground_truth = None
+    ground_truth_border_ignored = 0
     if label_bytes is not None:
         if label_filename and not label_filename.lower().endswith(".txt"):
             raise web.HTTPBadRequest(text="Ground Truth label must be a YOLO .txt file.")
@@ -171,6 +174,12 @@ async def analyze(request: web.Request) -> web.Response:
                 label_text,
                 image_width=int(image_bgr.shape[1]),
                 image_height=int(image_bgr.shape[0]),
+            )
+            ground_truth, ground_truth_border_ignored = filter_image_border_detections(
+                ground_truth,
+                image_width=int(image_bgr.shape[1]),
+                image_height=int(image_bgr.shape[0]),
+                margin=border_margin,
             )
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -194,6 +203,7 @@ async def analyze(request: web.Request) -> web.Response:
             threshold=threshold,
             tile_size=tile_size,
             overlap_ratio=overlap,
+            image_border_margin=border_margin,
         )
     except Exception as exc:
         LOGGER.exception("Analysis failed")
@@ -216,10 +226,14 @@ async def analyze(request: web.Request) -> web.Response:
             "adaptive_parent_predictions_discarded": (
                 result.raw_predictions - result.candidate_predictions
             ),
-            "duplicates_removed": result.candidate_predictions - len(result.detections),
+            "tile_edge_filtered": result.tile_edge_filtered,
+            "ownership_filtered": result.ownership_filtered,
+            "duplicates_removed": result.duplicates_removed,
+            "border_ignored": result.border_ignored,
             "threshold": threshold,
             "tile_size": tile_size,
             "overlap": overlap,
+            "border_margin": border_margin,
             "device": analyzer.device,
             "fp16_optimized": analyzer.optimized,
             "model_variant": analyzer.model_variant,
@@ -231,11 +245,13 @@ async def analyze(request: web.Request) -> web.Response:
         "annotated_image": encode_jpeg_data_url(result.annotated_image),
     }
     if ground_truth is not None:
-        response["evaluation"] = evaluate_instance_segmentation(
+        evaluation = evaluate_instance_segmentation(
             result.detections,
             ground_truth,
             iou_threshold=evaluation_iou,
         )
+        evaluation["ground_truth_border_ignored"] = ground_truth_border_ignored
+        response["evaluation"] = evaluation
     return web.json_response(response)
 
 

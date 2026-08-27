@@ -66,6 +66,10 @@
                             <option value="0.75">0.75 — Strict</option>
                         </select>
                     </label>
+                    <label>
+                        <span>Ignore image border</span>
+                        <div class="number-control"><input id="borderMargin" name="border_margin" type="number" min="0" max="100" step="1" value="10"><span>px</span></div>
+                    </label>
                     <button id="analyzeButton" class="primary-button" type="submit">Analyze image</button>
                 </div>
             </form>
@@ -155,7 +159,7 @@
                 </section>
                 <section class="panel export-panel">
                     <div class="section-heading"><div><p class="eyebrow">EXPORT</p><h2>تنزيل النتائج</h2></div></div>
-                    <p>احتفظ بالصورة أو صدّر كل instance مع التصنيف والثقة والإحداثيات.</p>
+                    <p>احتفظ بالصورة أو صدّر كل instance مع التصنيف والثقة والإحداثيات. الحبوب التي تعبر شريط حدود الصورة لا تدخل في النتائج.</p>
                     <button id="downloadCsv" class="secondary-button" type="button">Download CSV</button>
                     <button id="downloadJson" class="secondary-button" type="button">Download JSON</button>
                 </section>

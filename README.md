@@ -45,6 +45,8 @@ Ground Truth evaluation is optional. Upload the image's matching YOLO Segmentati
 
 The deployed checkpoint is Approach 1, whose bad/healthy output semantics are reversed. All user-facing outputs therefore apply the fixed mapping `model bad -> displayed healthy`, `model healthy -> displayed bad`, and `impurity -> impurity`. This includes visualization colors and labels, aggregate counts, detection tables, CSV/JSON display classes, and Ground Truth evaluation. Ground Truth IDs and the global class order remain unchanged. Each exported detection also includes `raw_class_id` and `raw_class_name` for auditability.
 
+Dense-image inference uses three safeguards against overcounting. Overlapping tiles have non-overlapping midpoint ownership regions, so a mask centroid is accepted by only one tile. Predictions clipped by an internal tile edge are rejected in favor of the overlapping neighbor's complete view. Class-agnostic mask/box duplicate merging then removes residual cross-tile duplicates. After merging, instances crossing the configurable inner image-border margin (10 px by default) are excluded from visualization, counts, exports, and evaluation because they represent partial grains. When a Ground Truth label is supplied, the same border rule is applied to its instances so ignored edge grains cannot become false negatives or distort the count comparison.
+
 
 For local use, place the trained Large V2 checkpoint at:
 
