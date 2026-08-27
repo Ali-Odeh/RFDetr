@@ -1,0 +1,36 @@
+{
+  "dataset": "C:\\Users\\alool\\Desktop\\Codes\\Python\\Test_RFDeter\\wheatdecv1_seg",
+  "subset_size": 3000,
+  "resize_mode": "aspect_pad",
+  "classes": {
+    "0": "bad seed",
+    "1": "healthy seed",
+    "2": "impurity"
+  },
+  "best_vit_s": {
+    "normalization": "original",
+    "embedding_mode": "cls",
+    "silhouette_cosine": 0.12526515126228333,
+    "knn1_excl_same_image": 0.943,
+    "knn5_purity_excl_same_image": 0.9127999999999998,
+    "mean_centroid_cosine": 0.680000921090444,
+    "pca_components_95": 142,
+    "effective_rank": 49.36509323120117
+  },
+  "best_vit_b": {
+    "normalization": "original",
+    "embedding_mode": "cls",
+    "silhouette_cosine": 0.1183062344789505,
+    "knn1_excl_same_image": 0.9406666666666667,
+    "knn5_purity_excl_same_image": 0.9174,
+    "mean_centroid_cosine": 0.645880937576294
+  },
+  "worst_robustness_cases": [
+    {
+      "normalization": "original",
+      "worst_perturbation": "blur_strong",
+      "mean_embedding_stability": 0.7097363471984863,
+      "silhouette": 0.10723387449979782
+    }
+  ]
+}

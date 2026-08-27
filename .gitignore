@@ -1,0 +1,34 @@
+.venv/
+.venv_broken_py313/
+.uv-cache/
+.uv-python/
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+
+outputs/
+runs/
+*.ckpt
+*.pth
+*.onnx
+
+# Local datasets and archives
+dataset_v2/
+wheatdecv1_seg/
+*.zip
+
+# Generated feature stores and experiment artifacts
+*.npy
+*.npz
+*.pkl
+*.pickle
+notebooks_Test_DinoV2/outputs_dinov2/
+notebooks_Test_DinoV2/dinov2_full_dataset_embeddings_v2/
+
+# Local duplicated/server bundles
+multispector_server_bundle/
+notebooks copy/
+
+# Local runtime files
+*.pid
+*.log

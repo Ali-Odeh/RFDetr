@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MULTISPECTOR | Grain Inspection</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main class="page-shell">
+        <header class="hero">
+            <div>
+                <p class="eyebrow">RF-DETR SEGMENTATION LARGE V2</p>
+                <h1>MULTISPECTOR</h1>
+                <p class="subtitle">ارفع صورة عينة الحبوب وشاهد التصنيف، الـmasks، والعدّ الكامل باستخدام Adaptive Tiling.</p>
+            </div>
+            <div id="modelStatus" class="status-pill"><span></span> جارٍ فحص الموديل</div>
+        </header>
+
+        <section class="panel upload-panel">
+            <form id="analyzeForm">
+                <label id="dropZone" class="drop-zone" for="imageInput">
+                    <input id="imageInput" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
+                    <div class="upload-icon">⌁</div>
+                    <strong>اسحب الصورة إلى هنا أو اضغط للاختيار</strong>
+                    <span>JPG, PNG أو WEBP — حتى 30MB</span>
+                </label>
+
+                <div class="label-upload-row">
+                    <label class="label-upload" for="labelInput">
+                        <input id="labelInput" name="label" type="file" accept=".txt,text/plain">
+                        <span><strong>Ground Truth label (اختياري)</strong><small>YOLO Segmentation TXT: class_id x1 y1 x2 y2 ...</small></span>
+                        <b>اختيار ملف TXT</b>
+                    </label>
+                    <p id="selectedLabel" class="selected-label">بدون label: سيتم عرض inference فقط بدون Accuracy أو IoU.</p>
+                </div>
+
+                <div class="controls">
+                    <label>
+                        <span>Confidence <output id="thresholdValue">0.35</output></span>
+                        <input id="threshold" name="threshold" type="range" min="0.10" max="0.90" step="0.05" value="0.35">
+                    </label>
+                    <label>
+                        <span>Tile size</span>
+                        <select id="tileSize" name="tile_size">
+                            <option value="512">512 px</option>
+                            <option value="640" selected>640 px — Recommended</option>
+                            <option value="768">768 px</option>
+                            <option value="1024">1024 px</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Tile overlap</span>
+                        <select id="overlap" name="overlap">
+                            <option value="0.15">15%</option>
+                            <option value="0.20" selected>20% — Recommended</option>
+                            <option value="0.25">25%</option>
+                            <option value="0.30">30%</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Evaluation IoU</span>
+                        <select id="evaluationIou" name="evaluation_iou">
+                            <option value="0.50" selected>0.50 — Standard</option>
+                            <option value="0.60">0.60</option>
+                            <option value="0.75">0.75 — Strict</option>
+                        </select>
+                    </label>
+                    <button id="analyzeButton" class="primary-button" type="submit">Analyze image</button>
+                </div>
+            </form>
+            <p id="selectedFile" class="selected-file"></p>
+            <div id="progress" class="progress hidden"><span></span><p>يتم تقسيم الصورة وتحليل الـTiles…</p></div>
+            <p id="errorMessage" class="error-message hidden"></p>
+        </section>
+
+        <section id="results" class="results hidden">
+            <div class="cards-grid">
+                <article class="metric-card total"><span>Total instances</span><strong id="totalCount">0</strong></article>
+                <article class="metric-card healthy"><span>Healthy seed</span><strong id="healthyCount">0</strong><small id="healthyPercent">0%</small></article>
+                <article class="metric-card bad"><span>Bad seed</span><strong id="badCount">0</strong><small id="badPercent">0%</small></article>
+                <article class="metric-card impurity"><span>Impurity</span><strong id="impurityCount">0</strong><small id="impurityPercent">0%</small></article>
+                <article class="metric-card quality"><span>Demo quality status</span><strong id="qualityStatus">—</strong><small>قاعدة تجريبية وليست مخرجًا من الموديل</small></article>
+            </div>
+            <div class="approach-one-notice"><b>Approach 1 mapping:</b> تم عكس bad ↔ healthy في الأعداد والحسابات فقط. صورة الـraw prediction بقيت بدون تغيير.</div>
+
+            <section id="evaluationSection" class="evaluation-section hidden">
+                <div class="panel evaluation-panel">
+                    <div class="section-heading">
+                        <div><p class="eyebrow">GROUND TRUTH EVALUATION</p><h2>مقارنة الموديل مع الـLabel</h2></div>
+                        <span id="evaluationThreshold" class="status-pill compact"></span>
+                    </div>
+                    <div class="evaluation-cards">
+                        <article><span>Ground Truth</span><strong id="gtTotal">0</strong></article>
+                        <article><span>Mean Mask IoU <small>matched masks only</small></span><strong id="meanIou">0%</strong></article>
+                        <article><span>Precision</span><strong id="evalPrecision">0%</strong></article>
+                        <article><span>Recall</span><strong id="evalRecall">0%</strong></article>
+                        <article><span>F1</span><strong id="evalF1">0%</strong></article>
+                        <article><span>Accuracy <small>correct class ÷ spatial matches</small></span><strong id="classAccuracy">0%</strong></article>
+                    </div>
+                    <div class="evaluation-counts" id="evaluationCounts"></div>
+                    <p class="evaluation-note">Accuracy هنا تعني نسبة التصنيف الصحيح بين الحبوب المتطابقة مكانيًا: TP ÷ Spatial matches. أما الحبوب الزائدة أو غير المكتشفة فتظهر في Precision وRecall وF1.</p>
+                </div>
+            </section>
+
+            <div class="images-comparison-grid">
+                <div class="panel image-panel">
+                    <div class="section-heading">
+                        <div><p class="eyebrow">INSTANCE SEGMENTATION</p><h2>نتيجة الموديل</h2></div>
+                        <a id="downloadImage" class="secondary-button" download="multispector-result.jpg">تنزيل الصورة</a>
+                    </div>
+                    <div class="legend">
+                        <span><i class="dot healthy-dot"></i> Healthy</span>
+                        <span><i class="dot bad-dot"></i> Bad</span>
+                        <span><i class="dot impurity-dot"></i> Impurity</span>
+                    </div>
+                    <img id="resultImage" alt="Annotated grain inspection result">
+                </div>
+            </div>
+
+            <section id="classCountComparison" class="panel table-panel simple-comparison hidden">
+                <div class="section-heading">
+                    <div><p class="eyebrow">SIMPLE COUNT COMPARISON</p><h2>مقارنة عدد الحبوب</h2></div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Class</th><th>Ground Truth</th><th>Prediction</th><th>Difference</th></tr></thead>
+                        <tbody id="classCountBody"></tbody>
+                        <tfoot id="classCountFoot"></tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <section id="technicalEvaluation" class="technical-evaluation hidden">
+                <details class="panel collapsible-panel">
+                    <summary><span><b>PER-CLASS EVALUATION</b><small>عرض Precision وRecall وF1 وIoU لكل فئة</small></span></summary>
+                    <div class="collapsible-content table-wrap">
+                        <table>
+                            <thead><tr><th>Class</th><th>GT</th><th>Pred</th><th>TP</th><th>Precision</th><th>Recall</th><th>F1</th><th>Mean IoU</th></tr></thead>
+                            <tbody id="evaluationBody"></tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <details class="panel collapsible-panel">
+                    <summary><span><b>CONFUSION MATRIX</b><small>GT rows × Prediction columns</small></span></summary>
+                    <div class="collapsible-content table-wrap"><table id="confusionTable"></table></div>
+                </details>
+            </section>
+
+            <div class="details-grid">
+                <section class="panel processing-panel">
+                    <div class="section-heading"><div><p class="eyebrow">PIPELINE</p><h2>معلومات المعالجة</h2></div></div>
+                    <dl id="processingDetails"></dl>
+                </section>
+                <section class="panel export-panel">
+                    <div class="section-heading"><div><p class="eyebrow">EXPORT</p><h2>تنزيل النتائج</h2></div></div>
+                    <p>احتفظ بالصورة أو صدّر كل instance مع التصنيف والثقة والإحداثيات.</p>
+                    <button id="downloadCsv" class="secondary-button" type="button">Download CSV</button>
+                    <button id="downloadJson" class="secondary-button" type="button">Download JSON</button>
+                </section>
+            </div>
+
+            <section class="panel table-panel">
+                <div class="section-heading">
+                    <div><p class="eyebrow">DETECTIONS</p><h2>تفاصيل الحبوب</h2></div>
+                    <span id="tableCount" class="muted"></span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ID</th><th>Class</th><th>Confidence</th><th>Center (x, y)</th></tr></thead>
+                        <tbody id="detectionsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+model,parameters_m,normalization,embedding_mode,embedding_dim,silhouette_cosine,knn1_excl_same_image,knn5_purity_excl_same_image,mean_centroid_cosine,pca_components_95,effective_rank,grains_per_sec,peak_gpu_mb
+vit_s14,22.056576,original,cls,384,0.12526515126228333,0.943,0.9127999999999998,0.680000921090444,142,49.36509323120117,27.12538999597257,768.54296875
+vit_b14,86.58048,original,cls,768,0.1183062344789505,0.9406666666666667,0.9174,0.645880937576294,273,77.23658752441406,13.36443833296434,736.1162109375

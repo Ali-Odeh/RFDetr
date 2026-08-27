@@ -1,0 +1,40 @@
+class_id,class_name,mean,median,std,count,normalization,perturbation
+0,bad seed,1.0,1.0,7.520566e-08,1000,original,clean
+1,healthy seed,1.0,1.0,7.123851e-08,1000,original,clean
+2,impurity,1.0,1.0,7.208066e-08,1000,original,clean
+0,bad seed,0.86976933,0.87445396,0.04607615,1000,original,blur_mild
+1,healthy seed,0.85979676,0.86619085,0.058032367,1000,original,blur_mild
+2,impurity,0.90450156,0.91430336,0.047206137,1000,original,blur_mild
+0,bad seed,0.69714403,0.69733775,0.08041468,1000,original,blur_strong
+1,healthy seed,0.70160943,0.7062948,0.0868419,1000,original,blur_strong
+2,impurity,0.7304556,0.73525035,0.083507285,1000,original,blur_strong
+0,bad seed,0.942591,0.94694924,0.023307204,1000,original,noise_mild
+1,healthy seed,0.9328025,0.9382633,0.032138597,1000,original,noise_mild
+2,impurity,0.94963,0.9526319,0.019785317,1000,original,noise_mild
+0,bad seed,0.8295908,0.83570874,0.046600536,1000,original,noise_strong
+1,healthy seed,0.8214058,0.8279399,0.062400322,1000,original,noise_strong
+2,impurity,0.86521626,0.87199926,0.04692626,1000,original,noise_strong
+0,bad seed,0.9861503,0.98802197,0.008404506,1000,original,brightness_dark
+1,healthy seed,0.98134595,0.98552835,0.014663539,1000,original,brightness_dark
+2,impurity,0.9870351,0.989077,0.008140543,1000,original,brightness_dark
+0,bad seed,0.9857548,0.98841786,0.009481711,1000,original,brightness_bright
+1,healthy seed,0.9782901,0.9839963,0.01639814,1000,original,brightness_bright
+2,impurity,0.98997235,0.9929591,0.0110886805,1000,original,brightness_bright
+0,bad seed,0.99457455,0.9952727,0.0032864923,1000,original,contrast_low
+1,healthy seed,0.99302495,0.99406767,0.004170205,1000,original,contrast_low
+2,impurity,0.99436104,0.99481267,0.0030367519,1000,original,contrast_low
+0,bad seed,0.9937687,0.9947808,0.00393222,1000,original,contrast_high
+1,healthy seed,0.993005,0.99411184,0.0042574774,1000,original,contrast_high
+2,impurity,0.99205136,0.9938875,0.0058971313,1000,original,contrast_high
+0,bad seed,0.97918665,0.9812603,0.009878739,1000,original,illumination_warm
+1,healthy seed,0.9791003,0.981755,0.012675173,1000,original,illumination_warm
+2,impurity,0.97521245,0.9779453,0.01301732,1000,original,illumination_warm
+0,bad seed,0.9634203,0.9658191,0.015360816,1000,original,illumination_cool
+1,healthy seed,0.9678364,0.9718517,0.017191624,1000,original,illumination_cool
+2,impurity,0.9654187,0.9683745,0.01648483,1000,original,illumination_cool
+0,bad seed,0.89370996,0.899637,0.047609765,1000,original,resolution_50pct
+1,healthy seed,0.893526,0.9046227,0.060974427,1000,original,resolution_50pct
+2,impurity,0.9317206,0.9402662,0.040037606,1000,original,resolution_50pct
+0,bad seed,0.72219545,0.723995,0.09111685,1000,original,resolution_25pct
+1,healthy seed,0.715691,0.720343,0.098906085,1000,original,resolution_25pct
+2,impurity,0.7657423,0.7717736,0.08269308,1000,original,resolution_25pct
