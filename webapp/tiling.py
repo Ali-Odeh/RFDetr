@@ -111,19 +111,6 @@ class GrainDetection:
 
 
 @dataclass(slots=True)
-class EdgeFragment:
-    detection: GrainDetection
-    seam_x: int | None = None
-    seam_y: int | None = None
-
-
-@dataclass(slots=True)
-class SeamRecapture:
-    tile: Tile
-    fragments: list[EdgeFragment]
-
-
-@dataclass(slots=True)
 class AnalysisResult:
     detections: list[GrainDetection]
     annotated_image: np.ndarray
@@ -134,8 +121,6 @@ class AnalysisResult:
     elapsed_ms: float
     tile_edge_filtered: int = 0
     ownership_filtered: int = 0
-    seam_recapture_tiles: int = 0
-    seam_recovered_predictions: int = 0
     duplicates_removed: int = 0
     border_ignored: int = 0
 
@@ -291,65 +276,6 @@ def _detection_representative_point(item: GrainDetection) -> tuple[float, float]
     return (x1 + x2) / 2.0, (y1 + y2) / 2.0
 
 
-def _internal_edge_fragment(
-    detection: GrainDetection,
-    tile: Tile,
-    *,
-    image_width: int,
-    image_height: int,
-    tolerance: int,
-) -> EdgeFragment | None:
-    left, top, right, bottom = _detection_extent(detection)
-    seam_x: int | None = None
-    seam_y: int | None = None
-    if tile.x1 > 0 and left <= tile.x1 + tolerance:
-        seam_x = tile.x1
-    elif tile.x2 < image_width and right >= tile.x2 - tolerance:
-        seam_x = tile.x2
-    if tile.y1 > 0 and top <= tile.y1 + tolerance:
-        seam_y = tile.y1
-    elif tile.y2 < image_height and bottom >= tile.y2 - tolerance:
-        seam_y = tile.y2
-    if seam_x is None and seam_y is None:
-        return None
-    return EdgeFragment(detection=detection, seam_x=seam_x, seam_y=seam_y)
-
-
-def partition_tile_detections(
-    detections: Iterable[GrainDetection],
-    tile: Tile,
-    *,
-    image_width: int,
-    image_height: int,
-    internal_edge_tolerance: int = 2,
-) -> tuple[list[GrainDetection], list[EdgeFragment], int]:
-    """Separate owned masks, clipped edge fragments, and overlap duplicates."""
-    kept: list[GrainDetection] = []
-    edge_fragments: list[EdgeFragment] = []
-    ownership_filtered = 0
-    tolerance = max(0, internal_edge_tolerance)
-
-    for detection in detections:
-        edge_fragment = _internal_edge_fragment(
-            detection,
-            tile,
-            image_width=image_width,
-            image_height=image_height,
-            tolerance=tolerance,
-        )
-        if edge_fragment is not None:
-            edge_fragments.append(edge_fragment)
-            continue
-
-        center_x, center_y = _detection_representative_point(detection)
-        if not tile.owns(center_x, center_y):
-            ownership_filtered += 1
-            continue
-        kept.append(detection)
-
-    return kept, edge_fragments, ownership_filtered
-
-
 def filter_tile_detections(
     detections: Iterable[GrainDetection],
     tile: Tile,
@@ -358,67 +284,31 @@ def filter_tile_detections(
     image_height: int,
     internal_edge_tolerance: int = 2,
 ) -> tuple[list[GrainDetection], int, int]:
-    """Compatibility wrapper returning edge-fragment and ownership counts."""
-    kept, edge_fragments, ownership_filtered = partition_tile_detections(
-        detections,
-        tile,
-        image_width=image_width,
-        image_height=image_height,
-        internal_edge_tolerance=internal_edge_tolerance,
-    )
-    return kept, len(edge_fragments), ownership_filtered
+    """Keep one tile owner and reject objects clipped by internal tile edges."""
+    kept: list[GrainDetection] = []
+    edge_filtered = 0
+    ownership_filtered = 0
+    tolerance = max(0, internal_edge_tolerance)
 
-
-def _centered_crop_bounds(center: float, crop_extent: int, axis_length: int) -> tuple[int, int]:
-    extent = min(max(1, crop_extent), axis_length)
-    start = int(round(center - extent / 2.0))
-    start = min(max(0, start), axis_length - extent)
-    return start, start + extent
-
-
-def build_seam_recaptures(
-    fragments: Iterable[EdgeFragment],
-    *,
-    image_width: int,
-    image_height: int,
-    crop_size: int,
-    max_recaptures: int = 256,
-) -> list[SeamRecapture]:
-    """Group edge fragments into bounded crops centered across internal seams."""
-    crop_extent = min(max(64, crop_size), max(image_width, image_height))
-    bucket_stride = max(32, crop_extent // 2)
-    grouped: dict[tuple[int, int, int, int], list[EdgeFragment]] = {}
-
-    for fragment in fragments:
-        center_x, center_y = _detection_representative_point(fragment.detection)
-        if fragment.seam_x is not None:
-            center_x = float(fragment.seam_x)
-        else:
-            center_x = round(center_x / bucket_stride) * bucket_stride
-        if fragment.seam_y is not None:
-            center_y = float(fragment.seam_y)
-        else:
-            center_y = round(center_y / bucket_stride) * bucket_stride
-
-        x1, x2 = _centered_crop_bounds(center_x, crop_extent, image_width)
-        y1, y2 = _centered_crop_bounds(center_y, crop_extent, image_height)
-        grouped.setdefault((x1, y1, x2, y2), []).append(fragment)
-
-    ranked_groups = sorted(
-        grouped.items(),
-        key=lambda item: (
-            -len(item[1]),
-            -max(fragment.detection.confidence for fragment in item[1]),
-            item[0],
-        ),
-    )[: max(0, max_recaptures)]
-    return [
-        SeamRecapture(
-            tile=Tile(x1=x1, y1=y1, x2=x2, y2=y2),
-            fragments=group,
+    for detection in detections:
+        left, top, right, bottom = _detection_extent(detection)
+        touches_internal_edge = (
+            (tile.x1 > 0 and left <= tile.x1 + tolerance)
+            or (tile.y1 > 0 and top <= tile.y1 + tolerance)
+            or (tile.x2 < image_width and right >= tile.x2 - tolerance)
+            or (tile.y2 < image_height and bottom >= tile.y2 - tolerance)
         )
-        for (x1, y1, x2, y2), group in ranked_groups
-    ]
+        if touches_internal_edge:
+            edge_filtered += 1
+            continue
+
+        center_x, center_y = _detection_representative_point(detection)
+        if not tile.owns(center_x, center_y):
+            ownership_filtered += 1
+            continue
+        kept.append(detection)
+
+    return kept, edge_filtered, ownership_filtered
 
 
 def filter_image_border_detections(
@@ -498,58 +388,6 @@ def _mask_overlap(first: GrainDetection, second: GrainDetection) -> tuple[float,
     second_area = max(second.mask_area, 1)
     union = first_area + second_area - intersection
     return intersection / max(union, 1), intersection / max(min(first_area, second_area), 1)
-
-
-def _crosses_fragment_seam(
-    detection: GrainDetection,
-    fragment: EdgeFragment,
-    tolerance: int = 3,
-) -> bool:
-    left, top, right, bottom = _detection_extent(detection)
-    crosses_x = (
-        fragment.seam_x is None
-        or (
-            left <= fragment.seam_x + tolerance
-            and right >= fragment.seam_x - tolerance
-        )
-    )
-    crosses_y = (
-        fragment.seam_y is None
-        or (
-            top <= fragment.seam_y + tolerance
-            and bottom >= fragment.seam_y - tolerance
-        )
-    )
-    return crosses_x and crosses_y
-
-
-def select_seam_recoveries(
-    detections: Iterable[GrainDetection],
-    recapture: SeamRecapture,
-) -> list[GrainDetection]:
-    """Select complete second-pass masks that replace first-pass fragments."""
-    recovered: list[GrainDetection] = []
-    for detection in detections:
-        for fragment in recapture.fragments:
-            if not _crosses_fragment_seam(detection, fragment):
-                continue
-            mask_iou, mask_containment = _mask_overlap(
-                detection,
-                fragment.detection,
-            )
-            box_iou, box_containment = _bbox_overlap(
-                detection,
-                fragment.detection,
-            )
-            if (
-                mask_iou >= 0.05
-                or mask_containment >= 0.20
-                or box_iou >= 0.15
-                or box_containment >= 0.35
-            ):
-                recovered.append(detection)
-                break
-    return recovered
 
 
 def merge_duplicate_detections(
@@ -700,7 +538,6 @@ class TiledGrainAnalyzer:
         started = time.perf_counter()
         queue = generate_tiles(width, height, tile_size, overlap_ratio)
         collected: list[GrainDetection] = []
-        edge_fragments: list[EdgeFragment] = []
         tiles_processed = 0
         saturated_tiles = 0
         raw_predictions = 0
@@ -732,48 +569,15 @@ class TiledGrainAnalyzer:
 
                 extracted = _extract_detections(raw, tile, tiles_processed)
                 candidate_predictions += len(extracted)
-                owned, clipped, ownership_count = partition_tile_detections(
+                owned, edge_count, ownership_count = filter_tile_detections(
                     extracted,
                     tile,
                     image_width=width,
                     image_height=height,
                 )
-                tile_edge_filtered += len(clipped)
+                tile_edge_filtered += edge_count
                 ownership_filtered += ownership_count
-                edge_fragments.extend(clipped)
                 collected.extend(owned)
-
-            seam_crop_size = min(
-                384,
-                max(min_tile_size, int(round(tile_size * 0.50))),
-            )
-            seam_recaptures = build_seam_recaptures(
-                edge_fragments,
-                image_width=width,
-                image_height=height,
-                crop_size=seam_crop_size,
-            )
-            seam_recovered_predictions = 0
-            for recapture in seam_recaptures:
-                tile = recapture.tile
-                crop = image_bgr[tile.y1 : tile.y2, tile.x1 : tile.x2]
-                crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-                raw = self.model.predict(crop_rgb, threshold=threshold)
-                prediction_count = len(raw)
-                tiles_processed += 1
-                raw_predictions += prediction_count
-
-                extracted = _extract_detections(raw, tile, tiles_processed)
-                candidate_predictions += len(extracted)
-                complete, _, _ = filter_tile_detections(
-                    extracted,
-                    tile,
-                    image_width=width,
-                    image_height=height,
-                )
-                recovered = select_seam_recoveries(complete, recapture)
-                seam_recovered_predictions += len(recovered)
-                collected.extend(recovered)
 
         merged = merge_duplicate_detections(collected)
         duplicates_removed = len(collected) - len(merged)
@@ -793,8 +597,6 @@ class TiledGrainAnalyzer:
             candidate_predictions=candidate_predictions,
             tile_edge_filtered=tile_edge_filtered,
             ownership_filtered=ownership_filtered,
-            seam_recapture_tiles=len(seam_recaptures),
-            seam_recovered_predictions=seam_recovered_predictions,
             duplicates_removed=duplicates_removed,
             border_ignored=border_ignored,
             elapsed_ms=(time.perf_counter() - started) * 1000,

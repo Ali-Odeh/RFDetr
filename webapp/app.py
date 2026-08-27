@@ -228,8 +228,6 @@ async def analyze(request: web.Request) -> web.Response:
             ),
             "tile_edge_filtered": result.tile_edge_filtered,
             "ownership_filtered": result.ownership_filtered,
-            "seam_recapture_tiles": result.seam_recapture_tiles,
-            "seam_recovered_predictions": result.seam_recovered_predictions,
             "duplicates_removed": result.duplicates_removed,
             "border_ignored": result.border_ignored,
             "threshold": threshold,
